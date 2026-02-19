@@ -113,7 +113,9 @@ export default function Chat() {
   const [theme, setTheme] = useState<"dark" | "light">(() => {
     if (typeof window === "undefined") return "dark";
     const savedTheme = localStorage.getItem("theme");
-    return savedTheme === "light" || savedTheme === "dark" ? savedTheme : "dark";
+    return savedTheme === "light" || savedTheme === "dark"
+      ? savedTheme
+      : "dark";
   });
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<ConversationMessage[]>([]);
@@ -132,25 +134,26 @@ export default function Chat() {
   useEffect(() => {
     let mounted = true;
 
-    getSupabase().auth.getSession().then(async ({ data }) => {
-      if (!mounted) return;
-      if (!data.session) {
-        router.replace("/");
-        return;
-      }
+    getSupabase()
+      .auth.getSession()
+      .then(async ({ data }) => {
+        if (!mounted) return;
+        if (!data.session) {
+          router.replace("/");
+          return;
+        }
 
-      const metadataName =
-        typeof data.session.user.user_metadata?.display_name === "string"
-          ? data.session.user.user_metadata.display_name
-          : "";
+        const metadataName =
+          typeof data.session.user.user_metadata?.display_name === "string"
+            ? data.session.user.user_metadata.display_name
+            : "";
 
-      if (metadataName) {
-        setUserDisplayName(metadataName);
-      } else {
-        setUserDisplayName(data.session.user.email ?? "");
-      }
-
-    });
+        if (metadataName) {
+          setUserDisplayName(metadataName);
+        } else {
+          setUserDisplayName(data.session.user.email ?? "");
+        }
+      });
 
     return () => {
       mounted = false;
@@ -235,6 +238,7 @@ export default function Chat() {
         Authorization: `Bearer ${session.access_token}`,
       },
     });
+    
 
     const userMessage = message;
 
@@ -286,23 +290,27 @@ export default function Chat() {
     <main className="mx-auto flex min-h-screen w-full max-w-6xl flex-col px-4 py-8 sm:px-8">
       <div className="mb-6 flex items-center justify-between gap-4">
         <div>
-          <p className="text-xs uppercase tracking-[0.2em] text-[var(--muted)]">Financial AI</p>
-          <h1 className="text-2xl font-semibold text-[var(--foreground)] sm:text-3xl">
+          <p className="text-xs uppercase tracking-[0.2em] text-(--muted)">
+            Financial AI
+          </p>
+          <h1 className="text-2xl font-semibold text-foreground sm:text-3xl">
             Smart Money Assistant
           </h1>
           {userDisplayName ? (
-            <p className="mt-1 text-xs text-[var(--muted)]">Signed in as {userDisplayName}</p>
+            <p className="mt-1 text-xs text-(--muted)">
+              Signed in as {userDisplayName}
+            </p>
           ) : null}
         </div>
         <div className="flex items-center gap-2">
           <button
-            className="rounded-lg border border-[var(--surface-border)] bg-[var(--input-bg)] px-3 py-2 text-xs font-medium text-[var(--foreground)] transition hover:brightness-110"
+            className="rounded-lg border border-(--surface-border) bg-(--input-bg) px-3 py-2 text-xs font-medium text-foreground transition hover:brightness-110"
             onClick={toggleTheme}
           >
             {theme === "dark" ? "Light mode" : "Dark mode"}
           </button>
           <button
-            className="rounded-lg border border-[var(--surface-border)] bg-[var(--input-bg)] px-3 py-2 text-xs font-medium text-[var(--foreground)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+            className="rounded-lg border border-(--surface-border) bg-(--input-bg) px-3 py-2 text-xs font-medium text-foreground transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
             onClick={handleLogout}
             disabled={loggingOut}
           >
@@ -374,7 +382,7 @@ export default function Chat() {
           />
 
           <button
-            className="rounded-xl bg-gradient-to-r from-cyan-400 to-blue-500 px-6 py-3 text-sm font-medium text-slate-950 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+            className="rounded-xl bg-linear-to-r from-cyan-400 to-blue-500 px-6 py-3 text-sm font-medium text-slate-950 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
             onClick={sendMessage}
             disabled={loading}
           >
