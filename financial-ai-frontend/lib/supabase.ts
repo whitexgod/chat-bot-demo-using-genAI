@@ -1,4 +1,4 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey =
@@ -7,10 +7,10 @@ const supabaseKey =
 
 const REMEMBER_ME_KEY = "remember_me";
 
-let persistentClient: ReturnType<typeof createClient> | null = null;
-let sessionClient: ReturnType<typeof createClient> | null = null;
+let persistentClient: SupabaseClient | undefined;
+let sessionClient: SupabaseClient | undefined;
 
-const createBrowserClient = (storage: Storage) =>
+const createBrowserClient = (storage: Storage): SupabaseClient =>
   createClient(supabaseUrl, supabaseKey, {
     auth: {
       persistSession: true,
@@ -31,7 +31,7 @@ export const setRememberMePreference = (rememberMe: boolean) => {
   localStorage.setItem(REMEMBER_ME_KEY, String(rememberMe));
 };
 
-export const getSupabase = () => {
+export const getSupabase = (): SupabaseClient => {
   if (typeof window === "undefined") {
     return createClient(supabaseUrl, supabaseKey);
   }
