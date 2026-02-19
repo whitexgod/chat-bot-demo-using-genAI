@@ -91,3 +91,39 @@ button {
 .fade-in-up {
   animation: float-up 320ms ease-out both;
 }
+
+.thinking-loader {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 1.4rem;
+}
+
+.thinking-dot {
+  width: 0.46rem;
+  height: 0.46rem;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--accent) 80%, white 20%);
+  animation: thinking-wave 1s ease-in-out infinite;
+}
+
+.thinking-dot:nth-child(2) {
+  animation-delay: 0.18s;
+}
+
+.thinking-dot:nth-child(3) {
+  animation-delay: 0.36s;
+}
+
+@keyframes thinking-wave {
+  0%,
+  80%,
+  100% {
+    opacity: 0.38;
+    transform: translateY(0) scale(0.88);
+  }
+  40% {
+    opacity: 1;
+    transform: translateY(-3px) scale(1.05);
+  }
+}
