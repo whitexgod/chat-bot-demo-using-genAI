@@ -4,6 +4,11 @@ import { getCurrentUserId, getAdminClient, getUserRole } from "./clients.ts";
 import { getOrCreateChatId, loadHistory, saveMessage } from "./chat-repo.ts";
 import { corsHeaders, jsonResponse } from "./http.ts";
 import { buildQuery } from "./query-builder.ts";
+import {
+  createAiQueryLog,
+  markAiQueryLogError,
+  markAiQueryLogSuccess,
+} from "./query-log-repo.ts";
 import { QueryPlanSchema, type ModeHint } from "./schemas.ts";
 
 serve(async (req) => {
@@ -59,13 +64,53 @@ serve(async (req) => {
         requesterUserId: userId,
         isAdmin,
       });
+      const startedAt = Date.now();
+      let logId: string | null = null;
+
+      try {
+        logId = await createAiQueryLog(supabase, {
+          userId,
+          role,
+          chatId: resolvedChatId,
+          userMessage: message,
+          planner: plan,
+          sqlText: sql,
+        });
+      } catch (logError) {
+        console.error("ai_query_logs insert failed", logError);
+      }
 
       const { data: sqlData, error } = await supabase.rpc("execute_query", {
         query_text: sql,
       });
 
       if (error) {
+        if (logId) {
+          try {
+            await markAiQueryLogError(
+              supabase,
+              logId,
+              error.message ?? "execute_query failed",
+              Date.now() - startedAt,
+            );
+          } catch (logError) {
+            console.error("ai_query_logs error update failed", logError);
+          }
+        }
         return jsonResponse({ error }, 500);
+      }
+
+      if (logId) {
+        try {
+          await markAiQueryLogSuccess(
+            supabase,
+            logId,
+            Array.isArray(sqlData) ? sqlData.length : null,
+            Date.now() - startedAt,
+          );
+        } catch (logError) {
+          console.error("ai_query_logs success update failed", logError);
+        }
       }
 
       data = sqlData;
