@@ -74,6 +74,10 @@ function dateDaysAgo(daysAgo: number) {
   return d.toISOString().slice(0, 10);
 }
 
+function round2(value: number) {
+  return Number(value.toFixed(2));
+}
+
 async function run() {
   const env = parseEnv(loadDotEnv());
   const supabaseUrl = mustGet("SUPABASE_URL", env);
@@ -134,17 +138,118 @@ async function run() {
     .in("user_id", userIds);
   if (deleteTxError) throw deleteTxError;
 
-  const merchants = ["Seed Grocery", "Seed Coffee", "Seed Taxi", "Seed Books"];
-  const categories = ["groceries", "food", "transport", "shopping"];
+  const expenseMerchants = [
+    "Seed Grocery",
+    "Seed Coffee",
+    "Seed Taxi",
+    "Seed Books",
+    "Seed Pharmacy",
+    "Seed Utility",
+    "Seed Fuel",
+    "Seed Cinema",
+  ];
+  const expenseCategories = [
+    "groceries",
+    "food",
+    "transport",
+    "shopping",
+    "health",
+    "utilities",
+    "fuel",
+    "entertainment",
+  ];
+
+  const incomeMerchants = ["Seed Payroll", "Seed Cashback", "Seed Refund"];
+  const incomeCategories = ["salary", "cashback", "refund"];
+  const expenseCountPerUser = 55;
 
   const txRows = userIds.flatMap((userId, userIndex) => {
-    return Array.from({ length: 8 }, (_, i) => ({
-      user_id: userId,
-      amount: Number((10 + userIndex * 7 + i * 3.25).toFixed(2)),
-      category: categories[i % categories.length],
-      merchant: merchants[i % merchants.length],
-      date: dateDaysAgo((userIndex + 1) * 2 + i),
-    }));
+    const rows: Array<{
+      user_id: string;
+      amount: number;
+      debit: number;
+      credit: number;
+      category: string;
+      merchant: string;
+      date: string;
+    }> = [];
+
+    let balance = 0;
+
+    const addCredit = (
+      credit: number,
+      category: string,
+      merchant: string,
+      daysAgo: number,
+    ) => {
+      const roundedCredit = round2(credit);
+      rows.push({
+        user_id: userId,
+        amount: roundedCredit,
+        debit: 0,
+        credit: roundedCredit,
+        category,
+        merchant,
+        date: dateDaysAgo(daysAgo),
+      });
+      balance = round2(balance + roundedCredit);
+    };
+
+    const addDebit = (
+      debit: number,
+      category: string,
+      merchant: string,
+      daysAgo: number,
+    ) => {
+      const roundedDebit = round2(debit);
+      rows.push({
+        user_id: userId,
+        amount: round2(-roundedDebit),
+        debit: roundedDebit,
+        credit: 0,
+        category,
+        merchant,
+        date: dateDaysAgo(daysAgo),
+      });
+      balance = round2(balance - roundedDebit);
+    };
+
+    addCredit(5200 + userIndex * 600, "salary", "Seed Payroll", 120 - userIndex);
+
+    for (let i = 0; i < expenseCountPerUser; i++) {
+      if (i > 0 && i % 14 === 0) {
+        const bonus = 1200 + userIndex * 200 + (i % 3) * 175;
+        const incomeIndex = Math.floor(i / 14);
+        const incomeCategory = incomeCategories[incomeIndex % incomeCategories.length];
+        const incomeMerchant = incomeMerchants[incomeIndex % incomeMerchants.length];
+        addCredit(bonus, incomeCategory, incomeMerchant, 110 - i);
+      }
+
+      let debit = 28 + ((i * 17 + userIndex * 13) % 95);
+      debit = round2(debit + (i % 4) * 0.75);
+
+      if (balance - debit < 30) {
+        const topUp = round2(900 + userIndex * 150 + (i % 5) * 60);
+        addCredit(topUp, "salary", "Seed Payroll", 109 - i);
+      }
+
+      if (balance - debit < 0) {
+        debit = round2(Math.max(5, balance));
+      }
+
+      addDebit(
+        debit,
+        expenseCategories[i % expenseCategories.length],
+        expenseMerchants[i % expenseMerchants.length],
+        108 - i,
+      );
+    }
+
+    if (balance < 0) {
+      throw new Error(`Generated negative balance for user ${userId}`);
+    }
+
+    return rows;
   });
 
   const { error: insertTxError } = await supabase
