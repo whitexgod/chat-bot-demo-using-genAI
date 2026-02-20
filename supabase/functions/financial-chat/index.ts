@@ -48,7 +48,7 @@ serve(async (req) => {
 
     await saveMessage(supabase, resolvedChatId, "user", message);
 
-    const plan = await planRequest(message, modeHint as ModeHint | undefined);
+    const plan = await planRequest(message, modeHint as ModeHint | undefined, isAdmin);
 
     let reply = "";
     let mode: "chat" | "financial_query" = "chat";
@@ -74,6 +74,7 @@ serve(async (req) => {
           chatId: resolvedChatId,
           userMessage: message,
           planner: plan,
+          parsedQuery: validatedQuery,
           sqlText: sql,
         });
       } catch (logError) {

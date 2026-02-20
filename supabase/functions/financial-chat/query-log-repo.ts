@@ -6,6 +6,7 @@ type CreateAiQueryLogInput = {
   chatId: string;
   userMessage: string;
   planner: unknown;
+  parsedQuery: unknown;
   sqlText: string;
 };
 
@@ -21,6 +22,7 @@ export async function createAiQueryLog(
       chat_id: input.chatId,
       user_message: input.userMessage,
       planner: input.planner,
+      parsed_query: input.parsedQuery,
       sql_text: input.sqlText,
       status: "generated",
       started_at: new Date().toISOString(),

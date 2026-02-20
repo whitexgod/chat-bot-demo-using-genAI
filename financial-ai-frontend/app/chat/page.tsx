@@ -5,6 +5,7 @@ import { getSupabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 
 type ResponseMode = "chat" | "financial_query";
+type UiMode = "chat" | "financial";
 type ChatResponse = {
   reply: string;
   mode: ResponseMode;
@@ -126,6 +127,7 @@ export default function Chat() {
   const [loading, setLoading] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [requestError, setRequestError] = useState("");
+  const [activeMode, setActiveMode] = useState<UiMode>("chat");
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
@@ -233,6 +235,7 @@ export default function Chat() {
       body: {
         message,
         chatId,
+        modeHint: activeMode,
       },
       headers: {
         Authorization: `Bearer ${session.access_token}`,
@@ -366,10 +369,39 @@ export default function Chat() {
           </div>
         </div>
 
+        <div className="mb-3 flex w-full rounded-xl border border-[var(--surface-border)] bg-[var(--input-bg)] p-1">
+          <button
+            className={`flex-1 rounded-lg px-3 py-2 text-xs font-medium transition ${
+              activeMode === "chat"
+                ? "bg-cyan-400/20 text-[var(--foreground)]"
+                : "text-[var(--muted)] hover:text-[var(--foreground)]"
+            }`}
+            onClick={() => setActiveMode("chat")}
+            disabled={loading}
+          >
+            Normal Chat
+          </button>
+          <button
+            className={`flex-1 rounded-lg px-3 py-2 text-xs font-medium transition ${
+              activeMode === "financial"
+                ? "bg-cyan-400/20 text-[var(--foreground)]"
+                : "text-[var(--muted)] hover:text-[var(--foreground)]"
+            }`}
+            onClick={() => setActiveMode("financial")}
+            disabled={loading}
+          >
+            Financial DB Query
+          </button>
+        </div>
+
         <div className="flex flex-col gap-3 sm:flex-row">
           <input
             className="w-full rounded-xl border border-[var(--surface-border)] bg-[var(--input-bg)] px-4 py-3 text-sm text-[var(--foreground)] placeholder:text-[var(--muted)] focus:border-cyan-300/70 focus:outline-none"
-            placeholder="Ask about your expenses, totals, budgets, or anything else..."
+            placeholder={
+              activeMode === "financial"
+                ? "Ask for transaction data, totals, trends, and records from the database..."
+                : "Ask anything about your finances..."
+            }
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             disabled={loading}
