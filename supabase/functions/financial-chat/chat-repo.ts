@@ -56,23 +56,44 @@ export async function loadHistory(
   supabase: SupabaseClient,
   userId: string,
   chatId?: string,
-  isAdmin = false,
 ) {
-  if (!chatId) return { chatId: null, messages: [] as Array<{ role: string; content: string }> };
+  let resolvedChatId = chatId;
 
-  const isOwner = await validateChatOwnership(supabase, userId, chatId, isAdmin);
-  if (!isOwner) return { chatId: null, messages: [] as Array<{ role: string; content: string }> };
+  // History loading is always scoped to the logged-in user's own chats.
+  if (resolvedChatId) {
+    const isOwner = await validateChatOwnership(supabase, userId, resolvedChatId, false);
+    if (!isOwner) {
+      resolvedChatId = undefined;
+    }
+  }
+
+  if (!resolvedChatId) {
+    const { data: latestChat, error: latestChatError } = await supabase
+      .from("chats")
+      .select("id")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (latestChatError) throw latestChatError;
+    resolvedChatId = latestChat?.id as string | undefined;
+  }
+
+  if (!resolvedChatId) {
+    return { chatId: null, messages: [] as Array<{ role: string; content: string }> };
+  }
 
   const { data, error } = await supabase
     .from("messages")
     .select("role, content, created_at")
-    .eq("chat_id", chatId)
+    .eq("chat_id", resolvedChatId)
     .order("created_at", { ascending: true });
 
   if (error) throw error;
 
   return {
-    chatId,
+    chatId: resolvedChatId,
     messages: (data ?? []).map((m) => ({ role: m.role, content: m.content })),
   };
 }

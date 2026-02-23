@@ -75,7 +75,6 @@ serve(async (req) => {
         supabase,
         userId,
         typeof chatId === "string" ? chatId : undefined,
-        isAdmin,
       );
       return jsonResponse(history);
     }

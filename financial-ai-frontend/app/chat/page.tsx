@@ -234,6 +234,14 @@ export default function Chat() {
     const history: FunctionHistoryMessage[] = Array.isArray(data?.messages)
       ? (data.messages as FunctionHistoryMessage[])
       : [];
+    const resolvedHistoryChatId = typeof data?.chatId === "string" ? data.chatId : null;
+    setChatId(resolvedHistoryChatId);
+    if (resolvedHistoryChatId) {
+      sessionStorage.setItem(chatSessionKey, resolvedHistoryChatId);
+    } else {
+      sessionStorage.removeItem(chatSessionKey);
+    }
+
     setMessages(
       history.map((m) => ({
         role: m.role === "user" ? "user" : "assistant",
