@@ -107,6 +107,57 @@ function normalizeToINR(text: string) {
     .replace(/\$\s?(\d[\d,]*(?:\.\d+)?)/g, "₹$1");
 }
 
+function coerceNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value !== "string") return null;
+
+  const cleaned = value.replace(/,/g, "").trim();
+  if (!/^-?\d+(?:\.\d+)?$/.test(cleaned)) return null;
+  const parsed = Number(cleaned);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function formatINRCurrency(value: number) {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
+function escapeMarkdownCell(value: unknown) {
+  if (value === null || value === undefined) return "";
+  return String(value).replace(/\|/g, "\\|").replace(/\n/g, " ");
+}
+
+function toObjectRows(sqlData: unknown): Array<Record<string, unknown>> {
+  if (!Array.isArray(sqlData)) return [];
+  return sqlData.map((row, index) => {
+    if (row && typeof row === "object" && !Array.isArray(row)) {
+      return row as Record<string, unknown>;
+    }
+    return { row_index: index + 1, value: row };
+  });
+}
+
+function buildMarkdownTable(rows: Array<Record<string, unknown>>) {
+  if (rows.length === 0) return "";
+
+  const headers = Array.from(
+    new Set(rows.flatMap((row) => Object.keys(row))),
+  );
+  if (headers.length === 0) return "";
+
+  const headerRow = `| ${headers.join(" | ")} |`;
+  const sepRow = `| ${headers.map(() => "---").join(" | ")} |`;
+  const bodyRows = rows.map((row) => {
+    const cells = headers.map((key) => escapeMarkdownCell(row[key]));
+    return `| ${cells.join(" | ")} |`;
+  });
+
+  return [headerRow, sepRow, ...bodyRows].join("\n");
+}
+
 export async function planRequest(
   message: string,
   modeHint?: ModeHint,
@@ -167,44 +218,50 @@ ${message}
 }
 
 export async function summarizeFinancialResult(message: string, sqlData: unknown) {
-  const rows = Array.isArray(sqlData) ? sqlData : [];
-  const compactRows = rows.slice(0, 20).map((row) => {
-    if (!row || typeof row !== "object") return row;
-    const entries = Object.entries(row as Record<string, unknown>).slice(0, 8);
-    return Object.fromEntries(entries);
-  });
-  const compactPayload = {
-    row_count: rows.length,
-    sample_rows: compactRows,
-  };
+  const rows = toObjectRows(sqlData);
+  if (rows.length === 0) {
+    return [
+      "### Financial Data Summary",
+      "",
+      "- Request: " + message,
+      "- No matching records were found.",
+    ].join("\n");
+  }
 
-  const output = await runOllamaPrompt(
-    `
-You are a financial assistant.
-Given DB results, answer the user in Markdown only.
-Return valid Markdown (no plain text-only response).
-Use this format:
-- A short heading
-- A concise summary bullet list
-- A Markdown table if tabular data is present
-If no rows, clearly say no matching records were found.
-Use Indian Rupees (INR) for all monetary values only.
-Never use USD or $.
-Always format money with the ₹ symbol.
+  const headers = Array.from(new Set(rows.flatMap((row) => Object.keys(row))));
+  const totals: Record<string, number> = {};
+  for (const row of rows) {
+    for (const [key, value] of Object.entries(row)) {
+      const numericValue = coerceNumber(value);
+      if (numericValue === null) continue;
+      totals[key] = (totals[key] ?? 0) + numericValue;
+    }
+  }
 
-User message:
-${message}
+  const keyTotals = ["amount", "debit", "credit"]
+    .filter((key) => key in totals)
+    .map((key) => `- Total ${key}: ${formatINRCurrency(totals[key])}`);
 
-DB result JSON:
-${JSON.stringify(compactPayload)}
-`,
-    {
-      temperature: 0.1,
-      numPredict: 96,
-      numCtx: 768,
-      retries: 0,
-      keepAlive: "15s",
-    },
-  );
-  return normalizeToINR(output);
+  const fallbackTotals = keyTotals.length
+    ? []
+    : Object.entries(totals)
+      .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
+      .slice(0, 3)
+      .map(([key, value]) => `- Total ${key}: ${value.toLocaleString("en-IN")}`);
+
+  const summary = [
+    "### Financial Data Summary",
+    "",
+    `- Request: ${message}`,
+    `- Rows returned: ${rows.length}`,
+    `- Columns returned: ${headers.join(", ") || "none"}`,
+    ...keyTotals,
+    ...fallbackTotals,
+    "",
+    "### Full Result Set",
+    "",
+    buildMarkdownTable(rows),
+  ].join("\n");
+
+  return normalizeToINR(summary);
 }

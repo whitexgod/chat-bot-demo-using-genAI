@@ -7,6 +7,7 @@ import {
   setRememberMePreference,
 } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
+import { ErrorToast } from "@/components/error-toast";
 
 export default function Home() {
   const router = useRouter();
@@ -110,6 +111,7 @@ export default function Home() {
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-6xl items-center justify-center px-4 py-10 sm:px-8">
+      <ErrorToast message={errorMessage} onClose={() => setErrorMessage("")} />
       <section className="glass-card fade-in-up w-full max-w-md rounded-3xl px-6 py-8 sm:px-8 sm:py-10">
         <p className="mb-2 text-sm uppercase tracking-[0.18em] text-[var(--muted)]">
           Financial AI
@@ -182,12 +184,6 @@ export default function Home() {
               />
               Remember me
             </label>
-          ) : null}
-
-          {errorMessage ? (
-            <p className="rounded-lg border border-rose-300/50 bg-rose-400/10 px-3 py-2 text-xs text-rose-200">
-              {errorMessage}
-            </p>
           ) : null}
 
           {successMessage ? (

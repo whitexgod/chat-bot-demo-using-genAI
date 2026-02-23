@@ -8,47 +8,8 @@ import {
   markAiQueryLogError,
   markAiQueryLogSuccess,
 } from "./query-log-repo.ts";
-import { QueryPlanSchema, type ModeHint } from "./schemas.ts";
-
-function normalizeSql(sql: string) {
-  return sql.trim().replace(/;+\s*$/, "");
-}
-
-function ensureSingleSelect(sql: string) {
-  const normalized = normalizeSql(sql);
-  const lower = normalized.toLowerCase();
-  if (!lower.startsWith("select ")) {
-    throw new Error("Only SELECT queries are allowed.");
-  }
-  if (/[;]+/.test(normalized)) {
-    throw new Error("Multiple statements are not allowed.");
-  }
-  const banned = ["insert ", "update ", "delete ", "drop ", "alter ", "truncate ", "create "];
-  if (banned.some((keyword) => lower.includes(keyword))) {
-    throw new Error("Mutation or DDL SQL is not allowed.");
-  }
-  return normalized;
-}
-
-function enforceRoleScope(sql: string, userId: string, isAdmin: boolean) {
-  if (isAdmin) return sql;
-
-  const lower = sql.toLowerCase();
-  if (!lower.includes(" from public.transactions")) {
-    throw new Error("Non-admin users can query only public.transactions.");
-  }
-
-  const escapedUserId = userId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const scopePattern = new RegExp(
-    `\\buser_id\\b\\s*=\\s*'${escapedUserId}'(?:\\s*::\\s*uuid)?`,
-    "i",
-  );
-  if (!scopePattern.test(sql)) {
-    throw new Error("Non-admin SQL must include own user_id scope.");
-  }
-
-  return sql;
-}
+import type { ModeHint } from "./schemas.ts";
+import { buildSafeReadQuery } from "./query-builder.ts";
 
 function formatFinancialData(sqlData: unknown) {
   if (!Array.isArray(sqlData) || sqlData.length === 0) {
@@ -161,8 +122,7 @@ serve(async (req) => {
         data = [];
         reply = reply || formatFinancialError("Model did not provide SQL for financial query mode.");
       } else {
-        const validatedQuery = QueryPlanSchema.parse(plan.query);
-        const sql = enforceRoleScope(ensureSingleSelect(validatedQuery.sql), userId, isAdmin);
+        const sql = buildSafeReadQuery(plan.query.sql, { userId, isAdmin });
         const startedAt = Date.now();
         let logId: string | null = null;
 
@@ -173,7 +133,7 @@ serve(async (req) => {
             chatId: resolvedChatId,
             userMessage: message,
             planner: plan,
-            parsedQuery: validatedQuery,
+            parsedQuery: plan.query,
             sqlText: sql,
           });
         } catch (logError) {
@@ -215,9 +175,7 @@ serve(async (req) => {
 
           data = sqlData;
           try {
-            const summary = await summarizeFinancialResult(message, sqlData);
-            const fullTable = formatFinancialData(sqlData);
-            reply = `${summary}\n\n---\n\n${fullTable}`;
+            reply = await summarizeFinancialResult(message, sqlData);
           } catch (summarizeError) {
             console.error("summarizeFinancialResult failed, using table fallback", summarizeError);
             reply = formatFinancialData(sqlData);

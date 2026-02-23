@@ -3,6 +3,7 @@
 import { ReactNode, useEffect, useRef, useState } from "react";
 import { getSupabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
+import { ErrorToast } from "@/components/error-toast";
 
 type ResponseMode = "chat" | "financial_query";
 type UiMode = "chat" | "financial";
@@ -19,8 +20,47 @@ type FunctionHistoryMessage = {
   role?: unknown;
   content?: unknown;
 };
+type FunctionErrorPayload = {
+  error?: unknown;
+  details?: unknown;
+  message?: unknown;
+};
 
 const chatSessionKey = "financial_ai_chat_id";
+
+function getPayloadMessage(payload: unknown) {
+  if (!payload || typeof payload !== "object") return "";
+  const parsed = payload as FunctionErrorPayload;
+  if (typeof parsed.details === "string" && parsed.details.trim()) return parsed.details;
+  if (typeof parsed.message === "string" && parsed.message.trim()) return parsed.message;
+  if (typeof parsed.error === "string" && parsed.error.trim()) return parsed.error;
+  return "";
+}
+
+async function resolveInvokeErrorMessage(error: unknown, data: unknown) {
+  const fromData = getPayloadMessage(data);
+  if (fromData) return fromData;
+
+  if (error && typeof error === "object" && "context" in error) {
+    const context = (error as { context?: unknown }).context;
+    if (context instanceof Response) {
+      try {
+        const payload = (await context.clone().json()) as FunctionErrorPayload;
+        const fromPayload = getPayloadMessage(payload);
+        if (fromPayload) return fromPayload;
+      } catch {
+        // Ignore JSON parse issues and fall back to generic error message.
+      }
+    }
+  }
+
+  if (error && typeof error === "object" && "message" in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === "string" && message.trim()) return message;
+  }
+
+  return "Request failed. Please try again.";
+}
 
 function parseTableRow(line: string) {
   return line
@@ -126,7 +166,7 @@ export default function Chat() {
   });
   const [loading, setLoading] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
-  const [requestError, setRequestError] = useState("");
+  const [requestErrorToast, setRequestErrorToast] = useState("");
   const [activeMode, setActiveMode] = useState<UiMode>("chat");
 
   useEffect(() => {
@@ -187,7 +227,7 @@ export default function Chat() {
     });
 
     if (error) {
-      setRequestError(error.message);
+      setRequestErrorToast(await resolveInvokeErrorMessage(error, data));
       return;
     }
 
@@ -217,7 +257,7 @@ export default function Chat() {
     if (!message.trim() || loading) return;
 
     setLoading(true);
-    setRequestError("");
+    setRequestErrorToast("");
 
     const supabase = getSupabase();
     const {
@@ -225,7 +265,7 @@ export default function Chat() {
     } = await supabase.auth.getSession();
 
     if (!session?.access_token) {
-      setRequestError("Session expired. Please sign in again.");
+      setRequestErrorToast("Session expired. Please sign in again.");
       setLoading(false);
       router.replace("/");
       return;
@@ -267,7 +307,7 @@ export default function Chat() {
         sessionStorage.setItem(chatSessionKey, parsed.chatId);
       }
     } else {
-      setRequestError(error.message);
+      setRequestErrorToast(await resolveInvokeErrorMessage(error, data));
     }
 
     setMessage("");
@@ -291,6 +331,10 @@ export default function Chat() {
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-6xl flex-col px-4 py-8 sm:px-8">
+      <ErrorToast
+        message={requestErrorToast}
+        onClose={() => setRequestErrorToast("")}
+      />
       <div className="mb-6 flex items-center justify-between gap-4">
         <div>
           <p className="text-xs uppercase tracking-[0.2em] text-(--muted)">
@@ -421,11 +465,6 @@ export default function Chat() {
             {loading ? "Thinking..." : "Send"}
           </button>
         </div>
-        {requestError ? (
-          <p className="mt-3 rounded-lg border border-rose-300/50 bg-rose-400/10 px-3 py-2 text-xs text-rose-200">
-            {requestError}
-          </p>
-        ) : null}
       </section>
     </main>
   );
