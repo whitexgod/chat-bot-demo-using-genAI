@@ -2,8 +2,11 @@
 
 import { useEffect, useState } from "react";
 import {
+  clearSavedCredentials,
   getRememberMePreference,
+  getSavedCredentials,
   getSupabase,
+  setSavedCredentials,
   setRememberMePreference,
 } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
@@ -11,13 +14,18 @@ import { ErrorToast } from "@/components/error-toast";
 
 export default function Home() {
   const router = useRouter();
+  const [savedCredentials] = useState(() => {
+    if (typeof window === "undefined") return null;
+    return getSavedCredentials();
+  });
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [displayName, setDisplayName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [email, setEmail] = useState(() => savedCredentials?.email ?? "");
+  const [password, setPassword] = useState(() => savedCredentials?.password ?? "");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(() => {
     if (typeof window === "undefined") return true;
+    if (savedCredentials) return true;
     return getRememberMePreference();
   });
   const [errorMessage, setErrorMessage] = useState("");
@@ -30,6 +38,7 @@ export default function Home() {
     const nextTheme =
       savedTheme === "light" || savedTheme === "dark" ? savedTheme : "dark";
     document.documentElement.setAttribute("data-theme", nextTheme);
+
     getSupabase()
       .auth.getSession()
       .then(({ data }) => {
@@ -59,6 +68,11 @@ export default function Home() {
     if (error) {
       setErrorMessage(error.message);
     } else {
+      if (rememberMe) {
+        setSavedCredentials({ email, password });
+      } else {
+        clearSavedCredentials();
+      }
       router.replace("/chat");
     }
     setLoading(false);
@@ -180,7 +194,14 @@ export default function Home() {
                 type="checkbox"
                 className="h-4 w-4 rounded border border-[var(--surface-border)] bg-[var(--input-bg)]"
                 checked={rememberMe}
-                onChange={(e) => setRememberMe(e.target.checked)}
+                onChange={(e) => {
+                  const checked = e.target.checked;
+                  setRememberMe(checked);
+                  setRememberMePreference(checked);
+                  if (!checked) {
+                    clearSavedCredentials();
+                  }
+                }}
               />
               Remember me
             </label>
